@@ -1,0 +1,291 @@
+
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>هواشناسی جهانی با نقشه و تصویر شهر</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Vazirmatn&display=swap');
+  body {
+    font-family: 'Vazirmatn', sans-serif;
+    margin: 0; padding: 0;
+    background: #f0f4f8;
+    color: #222;
+    direction: rtl;
+  }
+  header {
+    background: #00796b;
+    color: white;
+    padding: 1rem;
+    text-align: center;
+    font-size: 1.5rem;
+  }
+  #content {
+    max-width: 900px;
+    margin: 20px auto;
+    padding: 15px;
+  }
+  .controls {
+    text-align: center;
+    margin-bottom: 15px;
+  }
+  input[type=text] {
+    padding: 10px;
+    font-size: 1.1rem;
+    width: 60%;
+    max-width: 400px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    outline: none;
+  }
+  select {
+    padding: 10px;
+    font-size: 1.1rem;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    margin-right: 10px;
+  }
+  button {
+    background-color: #00796b;
+    border: none;
+    color: white;
+    padding: 10px 18px;
+    font-size: 1.1rem;
+    border-radius: 8px;
+    cursor: pointer;
+  }
+  button:hover {
+    background-color: #004d40;
+  }
+  #weatherInfo {
+    background: white;
+    border-radius: 15px;
+    padding: 20px;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.2);
+    margin-top: 10px;
+    text-align: right;
+  }
+  #weatherInfo h2 {
+    margin-top: 0;
+  }
+  #forecast {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 20px;
+  }
+  .forecast-day {
+    flex: 1 1 120px;
+    background: #e0f2f1;
+    border-radius: 12px;
+    padding: 10px;
+    box-shadow: 0 1px 6px rgba(0,0,0,0.1);
+  }
+  .forecast-day h4 {
+    margin: 0 0 5px;
+  }
+  .forecast-day img {
+    width: 50px;
+    height: 50px;
+  }
+  #map {
+    margin-top: 25px;
+    height: 400px;
+    border-radius: 15px;
+    overflow: hidden;
+  }
+  #cityImage {
+    margin-top: 25px;
+    border-radius: 15px;
+    max-height: 300px;
+    width: 100%;
+    object-fit: cover;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  }
+  @media (max-width:600px) {
+    #forecast {
+      flex-direction: column;
+    }
+    input[type=text] {
+      width: 100%;
+    }
+  }
+</style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+</head>
+<body>
+<header>هواشناسی جهانی | الطقس العالمي</header>
+<div id="content">
+  <div class="controls">
+    <select id="langSelect" onchange="changeLang()">
+      <option value="fa">فارسی</option>
+      <option value="ar">العربية</option>
+    </select>
+    <input type="text" id="cityInput" placeholder="نام شهر یا کشور را وارد کنید / أدخل اسم المدينة أو البلد" />
+    <button onclick="searchWeather()">جستجو / بحث</button>
+  </div>
+  <div id="weatherInfo" style="display:none;">
+    <h2 id="cityName"></h2>
+    <p id="desc"></p>
+    <p><strong><span id="temp"></span></strong></p>
+    <p><span id="humidity"></span></p>
+    <p><span id="wind"></span></p>
+  </div>
+  <div id="forecast"></div>
+  <img id="cityImage" alt="تصویر شهر" />
+  <div id="map"></div>
+</div>
+
+<script>
+  const OPENWEATHER_API_KEY = "dc9c93f51cdd375d459483c2a9f86d88";
+  const UNSPLASH_ACCESS_KEY = "YOUR_UNSPLASH_ACCESS_KEY"; // *** اینجا باید کلید رایگان Unsplash بزاری یا از کلید تستی استفاده کنیم ***
+  let currentLang = "fa";
+  let map, marker;
+
+  // توابع ترجمه ساده
+  const translations = {
+    fa: {
+      placeholder: "نام شهر یا کشور را وارد کنید",
+      searchBtn: "جستجو",
+      temp: "دما",
+      humidity: "رطوبت",
+      wind: "باد",
+      description: "شرح",
+      windDir: ["شمال", "شمال‌شرق", "شرق", "جنوب‌شرق", "جنوب", "جنوب‌غرب", "غرب", "شمال‌غرب"],
+      forecastTitle: "پیش‌بینی ۵ روزه"
+    },
+    ar: {
+      placeholder: "أدخل اسم المدينة أو البلد",
+      searchBtn: "بحث",
+      temp: "درجة الحرارة",
+      humidity: "الرطوبة",
+      wind: "الرياح",
+      description: "الوصف",
+      windDir: ["شمال", "شمال شرق", "شرق", "جنوب شرق", "جنوب", "جنوب غرب", "غرب", "شمال غرب"],
+      forecastTitle: "توقعات 5 أيام"
+    }
+  };
+
+  function changeLang() {
+    currentLang = document.getElementById("langSelect").value;
+    document.getElementById("cityInput").placeholder = translations[currentLang].placeholder;
+    document.querySelector("button").textContent = translations[currentLang].searchBtn;
+    clearWeather();
+  }
+
+  function clearWeather() {
+    document.getElementById("weatherInfo").style.display = "none";
+    document.getElementById("forecast").innerHTML = "";
+    document.getElementById("cityImage").style.display = "none";
+  }
+
+  function windDirection(deg) {
+    const dirs = translations[currentLang].windDir;
+    return dirs[Math.round(deg / 45) % 8];
+  }
+
+  async function searchWeather() {
+    const city = document.getElementById("cityInput").value.trim();
+    if (!city) return alert(currentLang === 'fa' ? "لطفاً نام شهر را وارد کنید." : "الرجاء إدخال اسم المدينة.");
+
+    clearWeather();
+
+    try {
+      // اطلاعات فعلی هوا
+      const weatherRes = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(city)}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=${currentLang}`);
+      const weatherData = await weatherRes.json();
+      if (weatherData.cod !== 200) throw new Error(weatherData.message);
+
+      // پیش‌بینی 5 روزه
+      const forecastRes = await fetch(`https://api.openweathermap.org/data/2.5/forecast?q=${encodeURIComponent(city)}&appid=${OPENWEATHER_API_KEY}&units=metric&lang=${currentLang}`);
+      const forecastData = await forecastRes.json();
+
+      // نمایش اطلاعات فعلی
+      document.getElementById("weatherInfo").style.display = "block";
+      document.getElementById("cityName").textContent = `${weatherData.name}, ${weatherData.sys.country}`;
+      document.getElementById("desc").textContent = weatherData.weather[0].description;
+      document.getElementById("temp").textContent = `${translations[currentLang].temp}: ${weatherData.main.temp} °C`;
+      document.getElementById("humidity").textContent = `${translations[currentLang].humidity}: ${weatherData.main.humidity} %`;
+      document.getElementById("wind").textContent = `${translations[currentLang].wind}: ${weatherData.wind.speed} m/s - ${windDirection(weatherData.wind.deg)}`;
+
+      // نمایش پیش‌بینی 5 روزه (هر 8 ساعت یک بار نمونه‌برداری)
+      let forecastHTML = `<h3>${translations[currentLang].forecastTitle}</h3>`;
+      forecastHTML += '<div style="display:flex; gap:10px; flex-wrap:wrap;">';
+      for (let i = 0; i < forecastData.list.length; i += 8) {
+        const item = forecastData.list[i];
+        const date = new Date(item.dt_txt);
+        const dayName = date.toLocaleDateString(currentLang === 'fa' ? 'fa-IR' : 'ar-EG', { weekday: 'short', day: 'numeric', month: 'short' });
+        forecastHTML += `
+          <div style="background:#e0f2f1; border-radius:10px; padding:10px; min-width:100px; box-shadow:0 1px 6px rgba(0,0,0,0.1); text-align:center;">
+            <strong>${dayName}</strong><br>
+            <img src="https://openweathermap.org/img/wn/${item.weather[0].icon}.png" alt="icon" /><br>
+            ${item.main.temp.toFixed(1)} °C<br>
+            ${item.weather[0].description}
+          </div>`;
+      }
+      forecastHTML += '</div>';
+      document.getElementById("forecast").innerHTML = forecastHTML;
+
+      // آپدیت نقشه
+      updateMap(weatherData.coord.lat, weatherData.coord.lon);
+
+      // بارگذاری تصویر از Unsplash
+      loadCityImage(weatherData.name);
+
+    } catch (error) {
+      alert(currentLang === 'fa' ? "شهر یافت نشد یا خطا در دریافت داده‌ها." : "لم يتم العثور على المدينة أو حدث خطأ في جلب البيانات.");
+      clearWeather();
+    }
+  }
+
+  // نقشه و مارکر
+  function initMap() {
+    map = L.map('map').setView([32, 53], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 18,
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+  }
+  function updateMap(lat, lon) {
+    if (!map) initMap();
+    map.setView([lat, lon], 9);
+    if (marker) map.removeLayer(marker);
+    marker = L.marker([lat, lon]).addTo(map);
+  }
+
+  // بارگذاری عکس از Unsplash (کلید API باید قرار داده شود)
+  async function loadCityImage(cityName) {
+    const imgElem = document.getElementById("cityImage");
+    if (!cityName) {
+      imgElem.style.display = "none";
+      return;
+    }
+    // اگر کلید API داری، از اینجا استفاده کن:
+    /*
+    try {
+      const res = await fetch(`https://api.unsplash.com/photos/random?query=${encodeURIComponent(cityName)}&client_id=${UNSPLASH_ACCESS_KEY}`);
+      const data = await res.json();
+      if (data && data.urls && data.urls.regular) {
+        imgElem.src = data.urls.regular;
+        imgElem.style.display = "block";
+      } else {
+        imgElem.style.display = "none";
+      }
+    } catch {
+      imgElem.style.display = "none";
+    }
+    */
+    // نسخه بدون کلید: عکس ثابت یا از عکس‌های رایگان آنلاین:
+    imgElem.src = "https://source.unsplash.com/900x300/?" + encodeURIComponent(cityName);
+    imgElem.style.display = "block";
+  }
+
+  // اجرای اولیه: زبان پیش‌فرض فارسی
+  window.onload = () => {
+    changeLang();
+  };
+</script>
+</body>
+</html>
